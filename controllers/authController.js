@@ -3,6 +3,8 @@ import { signToken } from '../utils/token.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
 import { sendWelcomeEmail } from '../utils/email.js';
 
+
+
 // Helpers for Google OAuth
 const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
@@ -15,11 +17,13 @@ function getBaseUrl(req) {
 }
 
 function encodeState(obj) {
+  // eslint-disable-next-line no-undef
   return Buffer.from(JSON.stringify(obj), 'utf8').toString('base64url');
 }
 
 function decodeState(state) {
   try {
+    // eslint-disable-next-line no-undef
     return JSON.parse(Buffer.from(String(state || ''), 'base64url').toString('utf8')) || {};
   } catch {
     return {};
@@ -80,11 +84,12 @@ export async function login(req, res) {
       return res.status(400).json({ message: 'Email/Username and password required' });
     }
     const id = String(emailusername).trim();
-    const rows = await sql`SELECT id, username, email, role, password_hash FROM users WHERE lower(email) = ${id.toLowerCase()} OR username = ${id} LIMIT 1`;
+    const rows = await sql`SELECT id, username, email, role, password_hash, is_frozen FROM users WHERE lower(email) = ${id.toLowerCase()} OR username = ${id} LIMIT 1`;
     const user = rows[0];
     if (!user) return res.status(401).json({ message: 'Invalid credentials' });
     const ok = verifyPassword(password, user.password_hash);
     if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
+    if (user.is_frozen) return res.status(403).json({ message: 'Account is frozen' });
     const token = signToken({ sub: user.id, username: user.username, role: user.role });
 
     // Record login stamp (best-effort)
@@ -158,6 +163,27 @@ export async function listLoginStamps(req, res) {
     return res.status(200).json({ logins: rows });
   } catch (e) {
     console.log('Error listing login stamps', e);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+export async function deleteLoginStamps(req, res) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+    const idRaw = req.params?.id || req.query?.id;
+    if (idRaw) {
+      const id = parseInt(String(idRaw), 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: 'Invalid id' });
+      const rows = await sql`DELETE FROM login_stamps WHERE id = ${id} AND user_id = ${userId} RETURNING id`;
+      if (!rows.length) return res.status(404).json({ message: 'Not found' });
+      return res.status(200).json({ message: 'Deleted' });
+    }
+    // Delete all for this user
+    await sql`DELETE FROM login_stamps WHERE user_id = ${userId}`;
+    return res.status(200).json({ message: 'Cleared' });
+  } catch (e) {
+    console.log('Error deleting login stamps', e);
     return res.status(500).json({ message: 'Internal server error' });
   }
 }
@@ -280,3 +306,4 @@ export async function googleAuthCallback(req, res) {
     return res.status(500).send('Internal server error');
   }
 }
+
