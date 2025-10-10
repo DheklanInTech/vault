@@ -1,6 +1,11 @@
 import { neon } from "@neondatabase/serverless";
 import "dotenv/config";
 import { hashPassword } from "../utils/password.js";
+import { ensureFetchPolyfill } from "../utils/fetchPolyfill.js";
+
+
+// Ensure global fetch exists for Neon in Node < 18
+await ensureFetchPolyfill();
 
 // Lazily create a SQL client only when the env var exists
 const databaseUrl = process.env.DATABASE_URL || "";
@@ -156,6 +161,8 @@ await sql`CREATE TABLE IF NOT EXISTS transactions(
     console.log("Database initialized successfully");
   } catch (error) {
     console.log("Error initializing DB", error);
+    console.log(`[db] Node: ${process.version}. fetch available: ${typeof globalThis.fetch === 'function'}. DATABASE_URL set: ${!!databaseUrl}`);
+    if (process.env.VERCEL) throw error;
     process.exit(1); // status code 1 means failure, 0 success
   }
 }
