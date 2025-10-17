@@ -23,7 +23,44 @@ if (process.env.NODE_ENV === "production" && !process.env.VERCEL) {
 
 // middleware
 app.use(rateLimiter);
-app.use(cors());
+
+// Robust CORS configuration
+const envOrigins = (process.env.CORS_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean);
+const allowAll = envOrigins.length === 0; // allow any origin unless CORS_ORIGINS is set
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // non-browser or same-origin
+    if (allowAll) return callback(null, true);
+    const allowed = envOrigins.some((o) => {
+      if (!o) return false;
+      if (o === origin) return true;
+      // Support leading wildcard subdomains like *.vercel.app
+      if (o.startsWith("*")) {
+        const suffix = o.slice(1);
+        return origin.endsWith(suffix);
+      }
+      return false;
+    });
+    return allowed ? callback(null, true) : callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+  methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Authorization", "Content-Type", "Accept"],
+  optionsSuccessStatus: 204,
+  maxAge: 600,
+};
+
+// Allow Chrome PNA preflight header when present
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS" && req.headers["access-control-request-private-network"] === "true") {
+    res.setHeader("Access-Control-Allow-Private-Network", "true");
+  }
+  next();
+});
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json());
 
 const PORT = process.env.PORT || 5001;
