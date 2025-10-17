@@ -28,6 +28,11 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 5001;
 
+// Base API root
+app.get("/api", (req, res) => {
+  res.status(200).json({ status: "ok", service: "backend" });
+});
+
 app.get("/api/health", (req, res) => {
   res.status(200).json({ status: "ok" });
 });
@@ -43,6 +48,11 @@ app.patch("/api/me", requireAuth, updateMe);
 
 
 export const ready = process.env.DATABASE_URL ? initDB() : Promise.resolve();
+
+// Fallback 404 handler for unmatched routes
+app.use((req, res) => {
+  res.status(404).json({ message: "Route not found", path: req.originalUrl });
+});
 
 export { PORT };
 export default app;
