@@ -28,7 +28,12 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 5001;
 
-// Base API root
+// Respond on root with a friendly hint (useful when running standalone server)
+app.get("/", (req, res) => {
+  res.status(200).json({ status: "ok", service: "backend", hint: "Use /api/* endpoints" });
+});
+
+// Base API root for quick health checks
 app.get("/api", (req, res) => {
   res.status(200).json({ status: "ok", service: "backend" });
 });
